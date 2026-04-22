@@ -38,11 +38,57 @@
       </div>
     </section>
 
-    <section class="output-options">
+    <section class="presets">
       <div class="section-title">
-        <h2>Output</h2>
-        <span class="section-hint">Applies to every preset you run.</span>
+        <h2>Presets</h2>
+        <span class="section-hint" id="presets-hint">Drop a file, then click any preset to start.</span>
       </div>
+      <div id="preset-grid" class="preset-grid"></div>
+    </section>
+
+    <section class="tweaks">
+      <div class="section-title">
+        <h2>Tweak this run</h2>
+        <span class="section-hint">Overrides the preset's silence threshold and edge padding — per click.</span>
+      </div>
+      <div class="tweak-row">
+        <label class="tweak" id="tweak-threshold-wrap">
+          <div class="tweak-head">
+            <span class="option-label">Silence threshold</span>
+            <span class="tweak-val" id="tweak-threshold-val">preset default</span>
+          </div>
+          <input id="tweak-threshold" type="range" min="0" max="100" value="0" step="1" />
+          <div class="tweak-scale">
+            <span>quiet</span>
+            <span>loud</span>
+          </div>
+        </label>
+        <label class="tweak">
+          <div class="tweak-head">
+            <span class="option-label">Edge padding</span>
+            <span class="tweak-val" id="tweak-margin-val">preset default</span>
+          </div>
+          <input id="tweak-margin" type="range" min="0" max="100" value="0" step="1" />
+          <div class="tweak-scale">
+            <span>tight</span>
+            <span>loose</span>
+          </div>
+        </label>
+        <button id="tweak-reset" class="btn btn-ghost btn-sm" type="button">Reset</button>
+      </div>
+      <label class="auto-toggle" title="Probe the file's noise floor and pick a threshold ~6dB above it. Works well on videos with background noise.">
+        <input id="opt-threshold-mode" type="checkbox" />
+        <span class="auto-toggle-label">Auto-calibrate threshold from the file's noise floor</span>
+        <span class="auto-toggle-hint">· measured at run time</span>
+      </label>
+    </section>
+
+    <details id="advanced" class="advanced">
+      <summary>
+        <span class="adv-chev" aria-hidden="true">›</span>
+        <span class="adv-title">Advanced</span>
+        <span class="adv-hint">Export target, format, bitrate, size, preview</span>
+      </summary>
       <div class="options-row">
         <label class="option">
           <span class="option-label">Export</span>
@@ -69,47 +115,7 @@
           <select id="opt-preview"></select>
         </label>
       </div>
-    </section>
-
-    <section class="tweaks">
-      <div class="section-title">
-        <h2>Tweak this run</h2>
-        <span class="section-hint">Overrides the preset's silence threshold and edge padding — per click.</span>
-      </div>
-      <div class="tweak-row">
-        <label class="tweak">
-          <div class="tweak-head">
-            <span class="option-label">Silence threshold</span>
-            <span class="tweak-val" id="tweak-threshold-val">preset default</span>
-          </div>
-          <input id="tweak-threshold" type="range" min="0" max="100" value="0" step="1" />
-          <div class="tweak-scale">
-            <span>quiet</span>
-            <span>loud</span>
-          </div>
-        </label>
-        <label class="tweak">
-          <div class="tweak-head">
-            <span class="option-label">Edge padding</span>
-            <span class="tweak-val" id="tweak-margin-val">preset default</span>
-          </div>
-          <input id="tweak-margin" type="range" min="0" max="100" value="0" step="1" />
-          <div class="tweak-scale">
-            <span>tight</span>
-            <span>loose</span>
-          </div>
-        </label>
-        <button id="tweak-reset" class="btn btn-ghost btn-sm" type="button">Reset</button>
-      </div>
-    </section>
-
-    <section class="presets">
-      <div class="section-title">
-        <h2>Presets</h2>
-        <span class="section-hint" id="presets-hint">Click any preset to start processing.</span>
-      </div>
-      <div id="preset-grid" class="preset-grid"></div>
-    </section>
+    </details>
 
     <section class="jobs">
       <div class="section-title">

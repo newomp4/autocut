@@ -322,6 +322,109 @@ code { font-family: var(--mono); font-size: 12.5px; }
   .tweak-row { grid-template-columns: 1fr; }
 }
 
+.tweak[data-disabled="true"] {
+  opacity: 0.4;
+  pointer-events: none;
+}
+.tweak[data-disabled="true"] .tweak-val {
+  color: var(--text);
+}
+
+.auto-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  user-select: none;
+  transition: border-color .15s var(--ease), background .15s var(--ease);
+}
+.auto-toggle:hover { border-color: var(--border-2); background: var(--surface-2); }
+.auto-toggle input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-2);
+  border-radius: 3px;
+  background: var(--surface-2);
+  cursor: pointer;
+  position: relative;
+}
+.auto-toggle input[type="checkbox"]:checked {
+  background: var(--text);
+  border-color: var(--text);
+}
+.auto-toggle input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border-right: 2px solid var(--bg);
+  border-bottom: 2px solid var(--bg);
+  transform: rotate(45deg);
+}
+.auto-toggle-label {
+  font-size: 13px;
+  color: var(--text);
+}
+.auto-toggle-hint {
+  font-size: 12px;
+  color: var(--text-mute);
+  font-family: var(--mono);
+}
+
+/* ── Advanced disclosure ────────────────────────────────────────────────── */
+.advanced {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.advanced > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  user-select: none;
+  transition: background .15s var(--ease);
+}
+.advanced > summary::-webkit-details-marker { display: none; }
+.advanced > summary:hover { background: var(--surface-2); }
+.adv-chev {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 16px;
+  color: var(--text-dim);
+  transition: transform .15s var(--ease);
+  line-height: 1;
+  width: 10px;
+}
+.advanced[open] > summary .adv-chev { transform: rotate(90deg); }
+.adv-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+}
+.adv-hint {
+  font-size: 12.5px;
+  color: var(--text-mute);
+}
+.advanced > .options-row {
+  padding: 0 18px 18px;
+}
+.advanced:not([open]) > .options-row { display: none; }
+
 /* ── Presets ─────────────────────────────────────────────────────────────── */
 .preset-grid {
   display: grid;

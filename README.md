@@ -90,6 +90,18 @@ Two sliders override the preset's silence threshold and edge padding for one
 click, without modifying `presets.json`. Leave them at the default to use
 whatever the preset defined.
 
+### Auto-calibrate threshold
+
+Tick **Auto-calibrate threshold from the file's noise floor** when the source
+has a lot of background noise (HVAC, wind, music bed) and your preset cuts
+are leaving the video untouched. AutoCut will measure the file's noise floor
+with `ffmpeg -af astats` and pick a threshold ~6 dB above it. The chosen
+value is logged with each job so you can see what it decided.
+
+This is the fix for *"I used the Aggressive preset on a noisy video and
+nothing was cut"* — the noise floor was higher than the preset's fixed
+threshold, so auto-editor saw the whole file as non-silence.
+
 ### Before / after
 
 Completed jobs show `in → out` duration and the percent trimmed. Handy for

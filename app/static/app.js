@@ -14,7 +14,8 @@
  * No build step, no framework — just DOM + fetch + WebSocket.
  */
 
-const LS_KEY = "autocut.options.v2";
+const LS_KEY = "autocut.options.v3";
+const LS_ADV_KEY = "autocut.advanced.open";
 
 const state = {
   files: [],            // [{ path, name, size?, uploading? }]
@@ -80,10 +81,20 @@ async function init() {
   setupDropzone();
   setupShortcuts();
   setupTweaks();
+  setupAdvanced();
   await loadOptions();
   await loadPresets();
   await checkHealth();
   await refreshJobs();
+}
+
+function setupAdvanced() {
+  const d = $("#advanced");
+  const saved = localStorage.getItem(LS_ADV_KEY);
+  if (saved === "1") d.open = true;
+  d.addEventListener("toggle", () => {
+    localStorage.setItem(LS_ADV_KEY, d.open ? "1" : "0");
+  });
 }
 
 /* ── Health ──────────────────────────────────────────────────────────────── */
@@ -150,7 +161,30 @@ function renderOptions() {
       applyOptionVisibility();
     });
   }
+
+  const tm = $("#opt-threshold-mode");
+  tm.checked = state.options.threshold_mode === "auto";
+  tm.addEventListener("change", () => {
+    state.options.threshold_mode = tm.checked ? "auto" : "preset";
+    localStorage.setItem(LS_KEY, JSON.stringify(state.options));
+    applyThresholdMode();
+  });
+
   applyOptionVisibility();
+  applyThresholdMode();
+}
+
+function applyThresholdMode() {
+  const auto = state.options.threshold_mode === "auto";
+  const wrap = $("#tweak-threshold-wrap");
+  wrap.dataset.disabled = auto ? "true" : "false";
+  if (auto) {
+    $("#tweak-threshold-val").textContent = "auto-calibrating";
+  } else {
+    // Refresh label from the slider's current position.
+    const th = $("#tweak-threshold");
+    th.dispatchEvent(new Event("input"));
+  }
 }
 
 function optionEl(value, label) {
@@ -388,6 +422,7 @@ function updatePresetAvailability() {
 async function runPreset(preset) {
   const files = readyFiles();
   if (files.length === 0) return;
+  const autoMode = state.options.threshold_mode === "auto";
   for (const file of files) {
     try {
       const r = await api("/api/process", {
@@ -397,7 +432,9 @@ async function runPreset(preset) {
           preset_id: preset.id,
           options: state.options,
           tweaks: {
-            threshold: state.tweaks.threshold,
+            // In auto mode the slider is disabled; don't send a manual value,
+            // so the server-side calibration path kicks in.
+            threshold: autoMode ? null : state.tweaks.threshold,
             margin: state.tweaks.margin,
           },
         }),

@@ -180,8 +180,9 @@ def build_commands(
     }
 
 
-# ── Duration probing ────────────────────────────────────────────────────────
+# ── Duration + noise probing ────────────────────────────────────────────────
 _DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)")
+_NOISE_FLOOR_RE = re.compile(r"Noise floor dB:\s*(-?\d+(?:\.\d+)?)")
 
 
 def probe_duration(path: Path) -> float | None:
@@ -202,3 +203,35 @@ def probe_duration(path: Path) -> float | None:
         return None
     h, mn, s = m.groups()
     return int(h) * 3600 + int(mn) * 60 + float(s)
+
+
+def calibrate_threshold(path: Path, max_secs: int | None = None) -> tuple[float, float] | None:
+    """Measure the file's noise floor and return (threshold_amplitude, floor_dB).
+
+    The amplitude is ~6 dB above the noise floor, clamped to the range
+    auto-editor handles reasonably (0.005 .. 0.2). Returns None if we
+    can't parse astats output (e.g. no audio track, very short clip).
+
+    max_secs bounds how much of the file to analyse — keeps calibration
+    snappy on long sources.
+    """
+    if not path.exists():
+        return None
+    import subprocess
+    cmd: list[str] = [FFMPEG_BIN, "-hide_banner", "-nostats"]
+    if max_secs:
+        cmd += ["-t", str(max_secs)]
+    cmd += ["-i", str(path), "-af", "astats=metadata=0:reset=0", "-f", "null", "-"]
+    try:
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+    m = _NOISE_FLOOR_RE.search(proc.stderr)
+    if not m:
+        return None
+    floor_db = float(m.group(1))
+    # 6 dB headroom: treat anything within 6 dB of the noise floor as silence.
+    threshold_db = floor_db + 6.0
+    amp = 10 ** (threshold_db / 20.0)
+    amp = max(0.005, min(0.2, amp))
+    return round(amp, 4), floor_db

@@ -34,6 +34,7 @@ from .options import (
     FORMATS,
     PREVIEW_SECS,
     SCALES,
+    THRESHOLD_MODES,
     VIDEO_BITRATES,
 )
 from .pipeline import AUTO_EDITOR_BIN, FFMPEG_BIN
@@ -66,6 +67,7 @@ class OutputOptions(BaseModel):
     scale: str = "1"
     export: str = "video"
     preview_secs: str = "0"
+    threshold_mode: str = "preset"
 
     @field_validator("format")
     @classmethod
@@ -108,6 +110,13 @@ class OutputOptions(BaseModel):
         v = str(v)
         if v not in PREVIEW_SECS:
             raise ValueError(f"preview_secs must be one of {PREVIEW_SECS}")
+        return v
+
+    @field_validator("threshold_mode")
+    @classmethod
+    def _check_threshold_mode(cls, v: str) -> str:
+        if v not in THRESHOLD_MODES:
+            raise ValueError(f"threshold_mode must be one of {THRESHOLD_MODES}")
         return v
 
 
@@ -180,6 +189,7 @@ async def api_options() -> dict:
             {"id": "60", "label": "First 60s"},
             {"id": "90", "label": "First 90s"},
         ],
+        "threshold_modes": list(THRESHOLD_MODES),
     }
 
 

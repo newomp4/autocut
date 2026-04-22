@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from .pipeline import build_commands, probe_duration
+from .pipeline import build_commands, calibrate_threshold, probe_duration
 
 _PCT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%")
 _FF_DURATION_RE = re.compile(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)")
@@ -141,11 +141,35 @@ class JobManager:
         job.started_at = time.time()
         await self._broadcast(job, {"type": "status", "job": job.to_dict()})
 
+        # Auto-calibrate threshold if requested AND the user didn't move the
+        # manual slider (manual always wins). We probe up to 60s of the source
+        # — plenty of signal to compute a noise floor without stalling on long
+        # files. If calibration fails (short clips, missing audio), we fall
+        # back to the preset default silently.
+        effective_threshold = job.tweaks.get("threshold")
+        mode = job.options.get("threshold_mode", "preset")
+        if mode == "auto" and effective_threshold is None:
+            loop = asyncio.get_running_loop()
+            preview_n = int(job.options.get("preview_secs", "0") or 0)
+            cap = preview_n if preview_n > 0 else 60
+            calib = await loop.run_in_executor(
+                None, calibrate_threshold, Path(job.input_path), cap,
+            )
+            if calib is not None:
+                amp, floor_db = calib
+                effective_threshold = amp
+                await self._emit_log(
+                    job,
+                    f"[auto] noise floor {floor_db:.1f} dB  →  threshold {amp:.4f}",
+                )
+            else:
+                await self._emit_log(job, "[auto] calibration failed — using preset default")
+
         try:
             from .pipeline import apply_tweaks
             effective_args = apply_tweaks(
                 job.preset_args,
-                threshold=job.tweaks.get("threshold"),
+                threshold=effective_threshold,
                 margin=job.tweaks.get("margin"),
             )
             plan = build_commands(

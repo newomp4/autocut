@@ -54,6 +54,7 @@ VIDEO_BITRATES = ("auto", "2M", "5M", "10M", "20M", "40M")
 AUDIO_BITRATES = ("auto", "128k", "192k", "256k", "320k")
 SCALES = ("1", "0.75", "0.5", "0.25")
 PREVIEW_SECS = ("0", "15", "30", "60", "90")  # "0" = off, everything else = seconds
+THRESHOLD_MODES = ("preset", "auto")  # manual overrides handled via `tweaks.threshold`
 
 DEFAULT_OPTIONS: dict[str, str] = {
     "format": "mp4",
@@ -62,6 +63,7 @@ DEFAULT_OPTIONS: dict[str, str] = {
     "scale": "1",
     "export": "video",
     "preview_secs": "0",
+    "threshold_mode": "preset",
 }
 
 
@@ -81,4 +83,6 @@ def validate(options: dict | None) -> dict[str, str]:
     if str(opts["preview_secs"]) not in PREVIEW_SECS:
         raise ValueError(f"preview_secs must be one of {PREVIEW_SECS}")
     opts["preview_secs"] = str(opts["preview_secs"])
+    if opts["threshold_mode"] not in THRESHOLD_MODES:
+        raise ValueError(f"threshold_mode must be one of {THRESHOLD_MODES}")
     return opts
