@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AutoCut</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">AC</span>
+      <span class="brand-name">AutoCut</span>
+    </div>
+    <div class="brand-sub">by <span class="handle">@newomp4</span></div>
+  </header>
+
+  <main class="container">
+
+    <section class="source">
+      <div id="dropzone" class="dropzone" aria-label="Drop video here or click to browse">
+        <div class="dropzone-inner" data-state="empty">
+          <div class="dz-empty">
+            <div class="dz-title">Drop one or more videos</div>
+            <div class="dz-sub">or</div>
+            <button id="browse-btn" class="btn">Browse…</button>
+            <div class="dz-hint">MP4 · MOV · MKV · WAV · MP3 · FLAC</div>
+          </div>
+          <div class="dz-selected">
+            <div class="dz-files" id="file-stack"></div>
+            <div class="dz-actions">
+              <button id="add-btn" class="btn btn-ghost btn-sm">Add file…</button>
+              <button id="clear-btn" class="btn btn-ghost btn-sm">Clear all</button>
+            </div>
+          </div>
+        </div>
+        <input id="file-input" type="file" accept="video/*,audio/*" multiple hidden />
+      </div>
+    </section>
+
+    <section class="output-options">
+      <div class="section-title">
+        <h2>Output</h2>
+        <span class="section-hint">Applies to every preset you run.</span>
+      </div>
+      <div class="options-row">
+        <label class="option">
+          <span class="option-label">Export</span>
+          <select id="opt-export"></select>
+        </label>
+        <label class="option" data-video-only>
+          <span class="option-label">Format</span>
+          <select id="opt-format"></select>
+        </label>
+        <label class="option" data-video-only>
+          <span class="option-label">Video bitrate</span>
+          <select id="opt-video-bitrate"></select>
+        </label>
+        <label class="option" data-video-only>
+          <span class="option-label">Size</span>
+          <select id="opt-scale"></select>
+        </label>
+        <label class="option" data-video-only>
+          <span class="option-label">Audio bitrate</span>
+          <select id="opt-audio-bitrate"></select>
+        </label>
+        <label class="option">
+          <span class="option-label">Preview</span>
+          <select id="opt-preview"></select>
+        </label>
+      </div>
+    </section>
+
+    <section class="tweaks">
+      <div class="section-title">
+        <h2>Tweak this run</h2>
+        <span class="section-hint">Overrides the preset's silence threshold and edge padding — per click.</span>
+      </div>
+      <div class="tweak-row">
+        <label class="tweak">
+          <div class="tweak-head">
+            <span class="option-label">Silence threshold</span>
+            <span class="tweak-val" id="tweak-threshold-val">preset default</span>
+          </div>
+          <input id="tweak-threshold" type="range" min="0" max="100" value="0" step="1" />
+          <div class="tweak-scale">
+            <span>quiet</span>
+            <span>loud</span>
+          </div>
+        </label>
+        <label class="tweak">
+          <div class="tweak-head">
+            <span class="option-label">Edge padding</span>
+            <span class="tweak-val" id="tweak-margin-val">preset default</span>
+          </div>
+          <input id="tweak-margin" type="range" min="0" max="100" value="0" step="1" />
+          <div class="tweak-scale">
+            <span>tight</span>
+            <span>loose</span>
+          </div>
+        </label>
+        <button id="tweak-reset" class="btn btn-ghost btn-sm" type="button">Reset</button>
+      </div>
+    </section>
+
+    <section class="presets">
+      <div class="section-title">
+        <h2>Presets</h2>
+        <span class="section-hint" id="presets-hint">Click any preset to start processing.</span>
+      </div>
+      <div id="preset-grid" class="preset-grid"></div>
+    </section>
+
+    <section class="jobs">
+      <div class="section-title">
+        <h2>Jobs</h2>
+        <span class="section-hint" id="jobs-hint">Nothing running.</span>
+      </div>
+      <div id="job-list" class="job-list"></div>
+    </section>
+
+  </main>
+
+  <footer class="footer">
+    <span id="health" class="health">connecting…</span>
+    <span class="sep">·</span>
+    <span>outputs in <code>exports/</code></span>
+  </footer>
+
+  <template id="file-row-template">
+    <div class="file-row">
+      <span class="file-row-name"></span>
+      <span class="file-row-meta"></span>
+      <button class="file-row-remove" type="button" title="Remove">×</button>
+    </div>
+  </template>
+
+  <template id="preset-card-template">
+    <button class="preset-card" type="button">
+      <div class="preset-top">
+        <span class="preset-badge"></span>
+        <span class="preset-name"></span>
+      </div>
+      <div class="preset-desc"></div>
+      <div class="preset-args"></div>
+    </button>
+  </template>
+
+  <template id="job-card-template">
+    <div class="job-card">
+      <div class="job-head">
+        <div class="job-title">
+          <span class="job-file"></span>
+          <span class="job-sep">·</span>
+          <span class="job-preset"></span>
+        </div>
+        <span class="job-status"></span>
+      </div>
+      <div class="job-stats"></div>
+      <div class="job-progress-wrap">
+        <div class="job-progress"><div class="job-progress-fill"></div></div>
+        <span class="job-progress-text">0%</span>
+      </div>
+      <pre class="job-log"></pre>
+      <div class="job-actions"></div>
+    </div>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,5 @@
+auto-editor>=29.0.0
+imageio-ffmpeg>=0.5.1
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12

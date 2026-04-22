@@ -1,0 +1,24 @@
+# Isolated Python env + bundled ffmpeg (rebuilt by setup.sh on first launch)
+.venv/
+
+# Runtime artifacts
+.render-cache/
+uploads/*
+exports/*
+!uploads/.gitkeep
+!exports/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Editor + OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local tool config (not shared)
+.claude/

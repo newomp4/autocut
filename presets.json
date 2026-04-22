@@ -1,0 +1,60 @@
+{
+  "presets": [
+    {
+      "id": "podcast",
+      "name": "Podcast",
+      "badge": "PC",
+      "description": "Conversational cuts. Removes dead air but leaves natural breathing room between sentences.",
+      "args": ["--edit", "audio:threshold=0.03", "--margin", "0.2s,0.3s"]
+    },
+    {
+      "id": "talking-head",
+      "name": "Talking Head",
+      "badge": "TH",
+      "description": "YouTube-style. Slightly conservative trimming that feels natural on camera.",
+      "args": ["--edit", "audio:threshold=0.025", "--margin", "0.25s,0.35s"]
+    },
+    {
+      "id": "shorts",
+      "name": "Shorts / TikTok",
+      "badge": "TT",
+      "description": "Tight and punchy. Aggressive cuts sized for vertical short-form video.",
+      "args": ["--edit", "audio:threshold=0.05", "--margin", "0.08s,0.08s"]
+    },
+    {
+      "id": "gentle-trim",
+      "name": "Gentle Trim",
+      "badge": "GT",
+      "description": "Only removes obvious dead air. Preserves the original pacing as much as possible.",
+      "args": ["--edit", "audio:threshold=0.015", "--margin", "0.4s,0.5s"]
+    },
+    {
+      "id": "tutorial",
+      "name": "Tutorial",
+      "badge": "TU",
+      "description": "For screencasts and how-to videos. Clean silence cuts with enough room to follow along.",
+      "args": ["--edit", "audio:threshold=0.03", "--margin", "0.2s,0.4s"]
+    },
+    {
+      "id": "aggressive",
+      "name": "Aggressive",
+      "badge": "AG",
+      "description": "Maximum removal. Cuts every pause tightly — great for fast-paced edits.",
+      "args": ["--edit", "audio:threshold=0.06", "--margin", "0.05s,0.05s"]
+    },
+    {
+      "id": "jump-cut",
+      "name": "Jump Cut Vlog",
+      "badge": "JC",
+      "description": "Vlog-style rapid jump cuts. Tight but readable.",
+      "args": ["--edit", "audio:threshold=0.04", "--margin", "0.1s,0.15s"]
+    },
+    {
+      "id": "speed-silence",
+      "name": "Speed Up Pauses",
+      "badge": "SP",
+      "description": "Keeps everything but speeds silent sections up 4×. Useful when you want a continuous take.",
+      "args": ["--edit", "audio:threshold=0.03", "--margin", "0.2s,0.3s", "--silent-speed", "4"]
+    }
+  ]
+}
