@@ -205,33 +205,75 @@ def probe_duration(path: Path) -> float | None:
     return int(h) * 3600 + int(mn) * 60 + float(s)
 
 
-def calibrate_threshold(path: Path, max_secs: int | None = None) -> tuple[float, float] | None:
-    """Measure the file's noise floor and return (threshold_amplitude, floor_dB).
+_SILENCE_DUR_RE = re.compile(r"silence_duration:\s*(\d+(?:\.\d+)?)")
 
-    The amplitude is ~6 dB above the noise floor, clamped to the range
-    auto-editor handles reasonably (0.005 .. 0.2). Returns None if we
-    can't parse astats output (e.g. no audio track, very short clip).
+# Candidate silence thresholds in dB, ordered quietest → loudest.
+# The quietest one that still flags >= target_silent_pct of the audio as silent
+# is chosen: it's the minimum aggressiveness needed to explain the noise floor.
+_CANDIDATE_DBS = (-40, -35, -30, -27, -24, -21, -18, -15)
+_TARGET_SILENT_PCT = 0.22  # roughly matches what people mean by "cut the pauses"
 
-    max_secs bounds how much of the file to analyse — keeps calibration
-    snappy on long sources.
-    """
-    if not path.exists():
-        return None
+
+def _silence_fraction_at(path: Path, db: int, max_secs: int | None) -> float | None:
+    """Run silencedetect at threshold `db` and return fraction of audio flagged silent."""
     import subprocess
     cmd: list[str] = [FFMPEG_BIN, "-hide_banner", "-nostats"]
     if max_secs:
         cmd += ["-t", str(max_secs)]
-    cmd += ["-i", str(path), "-af", "astats=metadata=0:reset=0", "-f", "null", "-"]
+    cmd += [
+        "-i", str(path),
+        "-af", f"silencedetect=noise={db}dB:d=0.1",
+        "-f", "null", "-",
+    ]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     except (subprocess.TimeoutExpired, FileNotFoundError):
         return None
-    m = _NOISE_FLOOR_RE.search(proc.stderr)
-    if not m:
+    # Duration of this analysis window (either the probed clip or the file).
+    dur_m = _DURATION_RE.search(proc.stderr)
+    if not dur_m:
         return None
-    floor_db = float(m.group(1))
-    # 6 dB headroom: treat anything within 6 dB of the noise floor as silence.
-    threshold_db = floor_db + 6.0
-    amp = 10 ** (threshold_db / 20.0)
-    amp = max(0.005, min(0.2, amp))
-    return round(amp, 4), floor_db
+    h, mn, s = dur_m.groups()
+    total = int(h) * 3600 + int(mn) * 60 + float(s)
+    if max_secs:
+        total = min(total, float(max_secs))
+    if total <= 0:
+        return None
+    silent = sum(float(m) for m in _SILENCE_DUR_RE.findall(proc.stderr))
+    return silent / total
+
+
+def calibrate_threshold(
+    path: Path,
+    max_secs: int | None = 60,
+    target_silent_pct: float = _TARGET_SILENT_PCT,
+) -> tuple[float, float, float] | None:
+    """Sweep silencedetect to find a threshold that flags ~target_silent_pct of
+    the audio as silent. Returns (amp, chosen_dB, measured_fraction).
+
+    Starts at the quietest candidate and walks up until we hit the target.
+    If no threshold reaches the target (very dense / no real silence),
+    returns the result at the loudest candidate tried.
+
+    max_secs caps the analysis window — calibration stays snappy on long files.
+    """
+    if not path.exists():
+        return None
+    loudest: tuple[int, float] | None = None
+    for db in _CANDIDATE_DBS:
+        frac = _silence_fraction_at(path, db, max_secs)
+        if frac is None:
+            continue
+        loudest = (db, frac)
+        if frac >= target_silent_pct:
+            amp = 10 ** (db / 20.0)
+            amp = max(0.005, min(0.25, amp))
+            return round(amp, 4), float(db), frac
+    if loudest is None:
+        return None
+    # No threshold hit the target (very hot audio or no real silence). Use the
+    # loudest candidate — it's the most generous we're willing to try.
+    db, frac = loudest
+    amp = 10 ** (db / 20.0)
+    amp = max(0.005, min(0.25, amp))
+    return round(amp, 4), float(db), frac

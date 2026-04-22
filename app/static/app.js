@@ -1,38 +1,32 @@
 /* AutoCut — frontend controller.
  *
- * Responsibilities:
- *   - Let the user pick one or many source files (drop, browse, native picker)
- *   - Expose output options (export type, format, bitrate, size, preview, audio
- *     bitrate) that persist across sessions and apply to every preset click
- *   - Per-run tweaks: silence threshold + edge padding sliders override the
- *     preset's --edit threshold= and --margin values for one run
- *   - Render preset cards; a click POSTs /api/process once per queued file
- *   - Connect a WebSocket per job to stream progress + log lines live
- *   - Show running/finished jobs with reveal-in-Finder + cancel actions,
- *     plus before/after duration stats when we have them
+ * Flow (explicit, no implicit triggers):
+ *   1. Drop files → queued on the page.
+ *   2. Click a preset → selects it (doesn't start).
+ *   3. Optionally tweak sliders / open Advanced.
+ *   4. Click the Start button in the sticky bottom bar → one job per file.
  *
- * No build step, no framework — just DOM + fetch + WebSocket.
+ * No build step, no framework. DOM + fetch + WebSocket.
  */
 
 const LS_KEY = "autocut.options.v3";
 const LS_ADV_KEY = "autocut.advanced.open";
+const LS_FINISHED_KEY = "autocut.finished.open";
 
 const state = {
-  files: [],            // [{ path, name, size?, uploading? }]
+  files: [],                // [{ path, name, size?, uploading? }]
   presets: [],
-  options: null,        // { export, format, video_bitrate, audio_bitrate, scale, preview_secs }
+  selectedPresetId: null,   // string | null
+  options: null,
   optionsSpec: null,
   tweaks: { threshold: null, margin: null },
-  jobs: new Map(),      // id -> { data, el, ws, logTail }
+  jobs: new Map(),          // id -> { data, el, ws, logTail }
 };
 
-/* Threshold slider maps 0..100 → 0.01..0.12 (quiet..loud).
- * Margin slider maps 0..100 → "0.05s,0.05s" .. "0.5s,0.6s".
- * Slider value 0 means "use preset default" (nothing sent). */
 const THRESHOLD_MIN = 0.01;
 const THRESHOLD_MAX = 0.12;
 const MARGIN_POINTS = [
-  null,                 // 0 = preset default
+  null,                     // 0 = preset default
   "0.05s,0.05s",
   "0.1s,0.1s",
   "0.15s,0.2s",
@@ -82,19 +76,45 @@ async function init() {
   setupShortcuts();
   setupTweaks();
   setupAdvanced();
+  setupStartBar();
+  setupFinishedToggle();
   await loadOptions();
   await loadPresets();
   await checkHealth();
   await refreshJobs();
+  updateStartBar();
+  updateStepStates();
 }
 
 function setupAdvanced() {
   const d = $("#advanced");
-  const saved = localStorage.getItem(LS_ADV_KEY);
-  if (saved === "1") d.open = true;
+  if (localStorage.getItem(LS_ADV_KEY) === "1") d.open = true;
   d.addEventListener("toggle", () => {
     localStorage.setItem(LS_ADV_KEY, d.open ? "1" : "0");
   });
+}
+
+function setupStartBar() {
+  $("#start-btn").addEventListener("click", startRun);
+}
+
+function setupFinishedToggle() {
+  const btn = $("#jobs-finished-toggle");
+  const list = $("#job-list-finished");
+  const saved = localStorage.getItem(LS_FINISHED_KEY);
+  const open = saved === null ? false : saved === "1";
+  setFinishedOpen(open);
+  btn.addEventListener("click", () => {
+    setFinishedOpen(list.hidden);
+  });
+}
+
+function setFinishedOpen(open) {
+  const list = $("#job-list-finished");
+  const btn = $("#jobs-finished-toggle");
+  list.hidden = !open;
+  btn.dataset.open = open ? "true" : "false";
+  localStorage.setItem(LS_FINISHED_KEY, open ? "1" : "0");
 }
 
 /* ── Health ──────────────────────────────────────────────────────────────── */
@@ -176,14 +196,11 @@ function renderOptions() {
 
 function applyThresholdMode() {
   const auto = state.options.threshold_mode === "auto";
-  const wrap = $("#tweak-threshold-wrap");
-  wrap.dataset.disabled = auto ? "true" : "false";
+  $("#tweak-threshold-wrap").dataset.disabled = auto ? "true" : "false";
   if (auto) {
     $("#tweak-threshold-val").textContent = "auto-calibrating";
   } else {
-    // Refresh label from the slider's current position.
-    const th = $("#tweak-threshold");
-    th.dispatchEvent(new Event("input"));
+    $("#tweak-threshold").dispatchEvent(new Event("input"));
   }
 }
 
@@ -205,11 +222,9 @@ function applyOptionVisibility() {
   const fmtSpec = state.optionsSpec.formats.find((x) => x.id === state.options.format);
   const audioOnly = !isNle && !!(fmtSpec && fmtSpec.audio_only);
 
-  // NLE export ignores all video/encoder options.
   $$("[data-video-only]").forEach((el) => {
     el.dataset.disabled = isNle ? "true" : "false";
   });
-  // Within video mode, audio-only containers dim size + video bitrate.
   if (!isNle) {
     for (const sel of ["#opt-video-bitrate", "#opt-scale"]) {
       const row = $(sel).closest(".option");
@@ -265,12 +280,10 @@ function setupDropzone() {
     e.stopPropagation();
     await openNativePicker(input);
   });
-
   $("#add-btn").addEventListener("click", (e) => {
     e.stopPropagation();
     input.click();
   });
-
   $("#clear-btn").addEventListener("click", (e) => {
     e.stopPropagation();
     state.files = [];
@@ -346,6 +359,8 @@ function renderFiles() {
     inner.dataset.state = "empty";
     $("#dropzone").classList.remove("has-file");
     updatePresetAvailability();
+    updateStartBar();
+    updateStepStates();
     return;
   }
   inner.dataset.state = "filled";
@@ -366,20 +381,28 @@ function renderFiles() {
     stack.appendChild(row);
   });
   updatePresetAvailability();
+  updateStartBar();
+  updateStepStates();
 }
 
 /* ── Keyboard shortcuts ──────────────────────────────────────────────────── */
 
 function setupShortcuts() {
   document.addEventListener("keydown", (e) => {
+    // Cmd/Ctrl+O → open file picker
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "o") {
       e.preventDefault();
       openNativePicker($("#file-input"));
     }
+    // Cmd/Ctrl+Enter → Start
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      e.preventDefault();
+      if (!$("#start-btn").disabled) startRun();
+    }
   });
 }
 
-/* ── Presets ─────────────────────────────────────────────────────────────── */
+/* ── Presets (selection, not trigger) ────────────────────────────────────── */
 
 async function loadPresets() {
   const r = await api("/api/presets");
@@ -396,61 +419,129 @@ function renderPresets() {
     $(".preset-badge", node).textContent = p.badge;
     $(".preset-name", node).textContent = p.name;
     $(".preset-desc", node).textContent = p.description;
-    $(".preset-args", node).textContent = p.args.join(" ");
-    node.addEventListener("click", () => runPreset(p));
+    node.dataset.id = p.id;
+    node.addEventListener("click", () => selectPreset(p.id));
     grid.appendChild(node);
   }
   updatePresetAvailability();
+  updatePresetSelection();
+}
+
+function selectPreset(id) {
+  state.selectedPresetId = state.selectedPresetId === id ? null : id;
+  updatePresetSelection();
+  updateStartBar();
+  updateStepStates();
+}
+
+function updatePresetSelection() {
+  $$(".preset-card").forEach((card) => {
+    card.dataset.selected = card.dataset.id === state.selectedPresetId ? "true" : "false";
+  });
+}
+
+function updatePresetAvailability() {
+  const n = readyFiles().length;
+  $$(".preset-card").forEach((b) => (b.disabled = false)); // always clickable for selection
+  const hint = $("#presets-hint");
+  if (!hint) return;
+  if (n === 0) hint.textContent = "Click a preset to select it. Nothing starts yet.";
+  else if (n === 1) hint.textContent = "Click a preset to pick it for this file.";
+  else hint.textContent = `Click a preset — it'll be queued for ${n} files.`;
 }
 
 function readyFiles() {
   return state.files.filter((f) => f.path && !f.uploading);
 }
 
-function updatePresetAvailability() {
-  const n = readyFiles().length;
-  $$(".preset-card").forEach((b) => (b.disabled = n === 0));
-  const hint = $("#presets-hint");
-  if (!hint) return;
-  if (n === 0) hint.textContent = "Click any preset to start processing.";
-  else if (n === 1) hint.textContent = "Click any preset to run it on this file.";
-  else hint.textContent = `Click any preset to queue it for ${n} files.`;
+/* ── Start bar ───────────────────────────────────────────────────────────── */
+
+function updateStartBar() {
+  const bar = $("#start-bar");
+  const btn = $("#start-btn");
+  const summary = $("#start-bar-summary");
+  const files = readyFiles();
+  const preset = state.presets.find((p) => p.id === state.selectedPresetId);
+
+  if (files.length === 0) {
+    summary.textContent = "Drop a file to begin.";
+    btn.disabled = true;
+    bar.dataset.ready = "false";
+    return;
+  }
+  if (!preset) {
+    summary.innerHTML = `<strong>${files.length} file${files.length === 1 ? "" : "s"}</strong> · pick a preset`;
+    btn.disabled = true;
+    bar.dataset.ready = "false";
+    return;
+  }
+  const count = files.length;
+  const exportLabel = state.options && state.options.export !== "video"
+    ? ` · ${state.options.export}`
+    : "";
+  const previewLabel = state.options && state.options.preview_secs !== "0"
+    ? ` · preview ${state.options.preview_secs}s`
+    : "";
+  summary.innerHTML =
+    `<strong>${preset.name}</strong> on ${count} file${count === 1 ? "" : "s"}` +
+    `<span class="start-bar-chips">${exportLabel}${previewLabel}</span>`;
+  btn.disabled = false;
+  bar.dataset.ready = "true";
+}
+
+function updateStepStates() {
+  const filesReady = readyFiles().length > 0;
+  const presetReady = !!state.selectedPresetId;
+  $('[data-step="1"]').dataset.done = filesReady ? "true" : "false";
+  $('[data-step="2"]').dataset.done = presetReady ? "true" : "false";
+}
+
+async function startRun() {
+  const files = readyFiles();
+  const preset = state.presets.find((p) => p.id === state.selectedPresetId);
+  if (files.length === 0 || !preset) return;
+  const autoMode = state.options.threshold_mode === "auto";
+  // Lock the button for the duration of queueing to prevent double-starts.
+  const btn = $("#start-btn");
+  btn.disabled = true;
+  btn.textContent = "Starting…";
+  try {
+    for (const file of files) {
+      try {
+        const r = await api("/api/process", {
+          method: "POST",
+          body: JSON.stringify({
+            input_path: file.path,
+            preset_id: preset.id,
+            options: state.options,
+            tweaks: {
+              threshold: autoMode ? null : state.tweaks.threshold,
+              margin: state.tweaks.margin,
+            },
+          }),
+        });
+        attachJob(r.job);
+      } catch (e) {
+        alert(`Failed to start ${file.name}: ${e.message}`);
+      }
+    }
+  } finally {
+    btn.textContent = "Start";
+    updateStartBar();
+  }
 }
 
 /* ── Jobs ────────────────────────────────────────────────────────────────── */
-
-async function runPreset(preset) {
-  const files = readyFiles();
-  if (files.length === 0) return;
-  const autoMode = state.options.threshold_mode === "auto";
-  for (const file of files) {
-    try {
-      const r = await api("/api/process", {
-        method: "POST",
-        body: JSON.stringify({
-          input_path: file.path,
-          preset_id: preset.id,
-          options: state.options,
-          tweaks: {
-            // In auto mode the slider is disabled; don't send a manual value,
-            // so the server-side calibration path kicks in.
-            threshold: autoMode ? null : state.tweaks.threshold,
-            margin: state.tweaks.margin,
-          },
-        }),
-      });
-      attachJob(r.job);
-    } catch (e) {
-      alert(`Failed to start ${file.name}: ${e.message}`);
-    }
-  }
-}
 
 async function refreshJobs() {
   try {
     const r = await api("/api/jobs");
     for (const j of r.jobs) attachJob(j);
   } catch {}
+}
+
+function isFinished(status) {
+  return status === "completed" || status === "failed" || status === "canceled";
 }
 
 function attachJob(jobData) {
@@ -461,16 +552,32 @@ function attachJob(jobData) {
   const tpl = $("#job-card-template");
   const el = tpl.content.firstElementChild.cloneNode(true);
   el.dataset.id = jobData.id;
-  $("#job-list").prepend(el);
+  placeJobCard(el, jobData);
 
   const entry = { data: jobData, el, ws: null, logTail: [] };
   state.jobs.set(jobData.id, entry);
   updateJobCard(jobData.id, jobData);
-  updateJobsHint();
 
   if (["pending", "queued", "running"].includes(jobData.status)) {
     connectWs(jobData.id);
   }
+}
+
+function placeJobCard(el, jobData) {
+  const bucket = isFinished(jobData.status) ? "#job-list-finished" : "#job-list-active";
+  $(bucket).prepend(el);
+  if (bucket === "#job-list-finished") el.classList.add("job-card--finished");
+  else el.classList.remove("job-card--finished");
+  updateFinishedHeader();
+}
+
+function updateFinishedHeader() {
+  const finishedList = $("#job-list-finished");
+  const wrap = $("#jobs-finished-wrap");
+  const count = finishedList.children.length;
+  wrap.hidden = count === 0;
+  $("#jobs-finished-label").textContent =
+    count === 0 ? "Finished (0)" : `Finished (${count})`;
 }
 
 function connectWs(jobId) {
@@ -534,6 +641,7 @@ function renderLog(jobId) {
 function updateJobCard(jobId, jobData) {
   const entry = state.jobs.get(jobId);
   if (!entry) return;
+  const prevStatus = entry.data.status;
   entry.data = { ...entry.data, ...jobData };
   const el = entry.el;
   const j = entry.data;
@@ -551,6 +659,14 @@ function updateJobCard(jobId, jobData) {
 
   renderJobStats(entry);
   renderJobActions(entry);
+
+  // If the job just transitioned to/from a finished state, re-bucket the card.
+  const wasFinished = isFinished(prevStatus);
+  const nowFinished = isFinished(j.status);
+  if (wasFinished !== nowFinished) {
+    placeJobCard(el, j);
+  }
+
   updateJobsHint();
 }
 
@@ -564,6 +680,9 @@ function renderJobStats(entry) {
   }
   if (j.options && j.options.preview_secs && j.options.preview_secs !== "0") {
     parts.push(`<span class="stat-tag">PREVIEW ${j.options.preview_secs}s</span>`);
+  }
+  if (j.options && j.options.threshold_mode === "auto") {
+    parts.push(`<span class="stat-tag">AUTO</span>`);
   }
 
   const din = j.input_duration;
@@ -631,7 +750,6 @@ function updateJobsHint() {
     const bits = [];
     if (running) bits.push(`${running} running`);
     if (queued) bits.push(`${queued} queued`);
-    bits.push(`${total} total`);
     hint.textContent = bits.join(" · ");
   }
 }

@@ -156,11 +156,11 @@ class JobManager:
                 None, calibrate_threshold, Path(job.input_path), cap,
             )
             if calib is not None:
-                amp, floor_db = calib
+                amp, chosen_db, frac = calib
                 effective_threshold = amp
                 await self._emit_log(
                     job,
-                    f"[auto] noise floor {floor_db:.1f} dB  →  threshold {amp:.4f}",
+                    f"[auto] sweep → {chosen_db:g} dB flags {frac*100:.0f}% silent  ·  threshold {amp:.4f}",
                 )
             else:
                 await self._emit_log(job, "[auto] calibration failed — using preset default")

@@ -17,11 +17,16 @@
 
   <main class="container">
 
-    <section class="source">
+    <section class="source step" data-step="1" data-done="false">
+      <div class="section-title">
+        <span class="step-num">1</span>
+        <h2>Source</h2>
+        <span class="section-hint">Drop one or more videos, or browse.</span>
+      </div>
       <div id="dropzone" class="dropzone" aria-label="Drop video here or click to browse">
         <div class="dropzone-inner" data-state="empty">
           <div class="dz-empty">
-            <div class="dz-title">Drop one or more videos</div>
+            <div class="dz-title">Drop files here</div>
             <div class="dz-sub">or</div>
             <button id="browse-btn" class="btn">Browse…</button>
             <div class="dz-hint">MP4 · MOV · MKV · WAV · MP3 · FLAC</div>
@@ -38,18 +43,20 @@
       </div>
     </section>
 
-    <section class="presets">
+    <section class="presets step" data-step="2" data-done="false">
       <div class="section-title">
-        <h2>Presets</h2>
-        <span class="section-hint" id="presets-hint">Drop a file, then click any preset to start.</span>
+        <span class="step-num">2</span>
+        <h2>Preset</h2>
+        <span class="section-hint" id="presets-hint">Click a preset to select it. Nothing starts yet.</span>
       </div>
       <div id="preset-grid" class="preset-grid"></div>
     </section>
 
-    <section class="tweaks">
+    <section class="tweaks step" data-step="3">
       <div class="section-title">
-        <h2>Tweak this run</h2>
-        <span class="section-hint">Overrides the preset's silence threshold and edge padding — per click.</span>
+        <span class="step-num">3</span>
+        <h2>Tweak</h2>
+        <span class="section-hint">Optional. Overrides the preset for one run.</span>
       </div>
       <div class="tweak-row">
         <label class="tweak" id="tweak-threshold-wrap">
@@ -76,15 +83,16 @@
         </label>
         <button id="tweak-reset" class="btn btn-ghost btn-sm" type="button">Reset</button>
       </div>
-      <label class="auto-toggle" title="Probe the file's noise floor and pick a threshold ~6dB above it. Works well on videos with background noise.">
+      <label class="auto-toggle" title="Sweeps silencedetect to find a threshold that flags ~22% of the audio as silent. Fixes noisy recordings that aggressive presets leave untouched.">
         <input id="opt-threshold-mode" type="checkbox" />
-        <span class="auto-toggle-label">Auto-calibrate threshold from the file's noise floor</span>
-        <span class="auto-toggle-hint">· measured at run time</span>
+        <span class="auto-toggle-label">Auto-calibrate threshold</span>
+        <span class="auto-toggle-hint">· measured from this file when it runs</span>
       </label>
     </section>
 
-    <details id="advanced" class="advanced">
+    <details id="advanced" class="advanced step" data-step="4">
       <summary>
+        <span class="step-num">4</span>
         <span class="adv-chev" aria-hidden="true">›</span>
         <span class="adv-title">Advanced</span>
         <span class="adv-hint">Export target, format, bitrate, size, preview</span>
@@ -122,10 +130,26 @@
         <h2>Jobs</h2>
         <span class="section-hint" id="jobs-hint">Nothing running.</span>
       </div>
-      <div id="job-list" class="job-list"></div>
+      <div id="job-list-active" class="job-list"></div>
+      <div class="jobs-finished-wrap" id="jobs-finished-wrap" hidden>
+        <button id="jobs-finished-toggle" class="jobs-finished-toggle" type="button">
+          <span class="chev">›</span>
+          <span id="jobs-finished-label">Finished (0)</span>
+        </button>
+        <div id="job-list-finished" class="job-list job-list--finished" hidden></div>
+      </div>
     </section>
 
   </main>
+
+  <div id="start-bar" class="start-bar" data-ready="false">
+    <div class="start-bar-inner">
+      <div class="start-bar-summary" id="start-bar-summary">
+        Drop a file to begin.
+      </div>
+      <button id="start-btn" class="btn btn-primary" type="button" disabled>Start</button>
+    </div>
+  </div>
 
   <footer class="footer">
     <span id="health" class="health">connecting…</span>
@@ -146,9 +170,9 @@
       <div class="preset-top">
         <span class="preset-badge"></span>
         <span class="preset-name"></span>
+        <span class="preset-check" aria-hidden="true">✓</span>
       </div>
       <div class="preset-desc"></div>
-      <div class="preset-args"></div>
     </button>
   </template>
 
