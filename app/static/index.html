@@ -41,6 +41,22 @@
         </div>
         <input id="file-input" type="file" accept="video/*,audio/*" multiple hidden />
       </div>
+
+      <div id="waveform-panel" class="wave-panel" hidden>
+        <div class="wave-head">
+          <span class="wave-file" id="wave-file"></span>
+          <span class="wave-info" id="wave-info"></span>
+        </div>
+        <canvas id="wave-canvas" class="wave-canvas" aria-hidden="true"></canvas>
+        <div class="wave-legend">
+          <span class="wave-swatch wave-swatch--kept"></span>
+          <span class="wave-legend-label">kept</span>
+          <span class="wave-swatch wave-swatch--cut"></span>
+          <span class="wave-legend-label">below threshold (cut)</span>
+          <span class="wave-thresh-line"></span>
+          <span class="wave-legend-label">threshold: <span id="wave-threshold-text">—</span></span>
+        </div>
+      </div>
     </section>
 
     <section class="presets step" data-step="2" data-done="false">
