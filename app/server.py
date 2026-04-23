@@ -37,7 +37,7 @@ from .options import (
     THRESHOLD_MODES,
     VIDEO_BITRATES,
 )
-from .pipeline import AUTO_EDITOR_BIN, FFMPEG_BIN, calibrate_threshold, extract_waveform
+from .pipeline import AUTO_EDITOR_BIN, FFMPEG_BIN
 from .presets import get_preset, load_presets
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -283,32 +283,6 @@ async def api_cancel(job_id: str) -> dict:
         raise HTTPException(404)
     await manager.cancel(job)
     return {"ok": True}
-
-
-@app.post("/api/waveform")
-async def api_waveform(req: PathRequest) -> dict:
-    """Return a peak-per-bucket waveform for the given file + its duration."""
-    if not Path(req.path).is_file():
-        raise HTTPException(400, f"file not found: {req.path}")
-    loop = asyncio.get_running_loop()
-    data = await loop.run_in_executor(None, extract_waveform, Path(req.path))
-    if data is None:
-        raise HTTPException(500, "could not extract waveform")
-    return data
-
-
-@app.post("/api/calibrate")
-async def api_calibrate(req: PathRequest) -> dict:
-    """Preview the auto-calibrated threshold without running a job. Lets the
-    UI overlay the calibrated cutline on the waveform before you commit."""
-    if not Path(req.path).is_file():
-        raise HTTPException(400, f"file not found: {req.path}")
-    loop = asyncio.get_running_loop()
-    result = await loop.run_in_executor(None, calibrate_threshold, Path(req.path))
-    if result is None:
-        return {"ok": False}
-    amp, db, frac = result
-    return {"ok": True, "amplitude": amp, "chosen_db": db, "silent_fraction": frac}
 
 
 @app.post("/api/reveal")

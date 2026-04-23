@@ -21,10 +21,6 @@ const state = {
   optionsSpec: null,
   tweaks: { threshold: null, margin: null },
   jobs: new Map(),          // id -> { data, el, ws, logTail }
-  // Waveform panel: we preview only the first ready file.
-  activeFilePath: null,     // path of the file whose waveform is displayed
-  activeWaveform: null,     // { peaks, duration, analyzed } | null
-  activeCalibration: null,  // { amplitude, chosen_db, silent_fraction } | null
 };
 
 const THRESHOLD_MIN = 0.01;
@@ -82,21 +78,12 @@ async function init() {
   setupAdvanced();
   setupStartBar();
   setupFinishedToggle();
-  setupWaveformResize();
   await loadOptions();
   await loadPresets();
   await checkHealth();
   await refreshJobs();
   updateStartBar();
   updateStepStates();
-}
-
-function setupWaveformResize() {
-  let t;
-  window.addEventListener("resize", () => {
-    clearTimeout(t);
-    t = setTimeout(drawWaveform, 100);
-  });
 }
 
 function setupAdvanced() {
@@ -212,11 +199,8 @@ function applyThresholdMode() {
   $("#tweak-threshold-wrap").dataset.disabled = auto ? "true" : "false";
   if (auto) {
     $("#tweak-threshold-val").textContent = "auto-calibrating";
-    fetchCalibrationForActive();
   } else {
-    state.activeCalibration = null;
     $("#tweak-threshold").dispatchEvent(new Event("input"));
-    drawWaveform();
   }
 }
 
@@ -268,7 +252,6 @@ function setupTweaks() {
       state.tweaks.threshold = Number(val.toFixed(3));
       thLabel.textContent = state.tweaks.threshold.toFixed(3);
     }
-    drawWaveform();
   };
   const syncMargin = () => {
     const v = parseInt(mg.value, 10);
@@ -400,7 +383,6 @@ function renderFiles() {
   updatePresetAvailability();
   updateStartBar();
   updateStepStates();
-  refreshActiveFile();
 }
 
 /* ── Keyboard shortcuts ──────────────────────────────────────────────────── */
@@ -450,7 +432,6 @@ function selectPreset(id) {
   updatePresetSelection();
   updateStartBar();
   updateStepStates();
-  drawWaveform();  // preset default threshold feeds the overlay
 }
 
 function updatePresetSelection() {
@@ -471,133 +452,6 @@ function updatePresetAvailability() {
 
 function readyFiles() {
   return state.files.filter((f) => f.path && !f.uploading);
-}
-
-/* ── Waveform preview ────────────────────────────────────────────────────── */
-
-async function refreshActiveFile() {
-  const files = readyFiles();
-  const first = files[0];
-  const path = first ? first.path : null;
-  if (path === state.activeFilePath) return;  // unchanged
-  state.activeFilePath = path;
-  state.activeWaveform = null;
-  state.activeCalibration = null;
-  if (!path) {
-    $("#waveform-panel").hidden = true;
-    return;
-  }
-  // Show the panel immediately with a loading state; fetch data in parallel.
-  $("#waveform-panel").hidden = false;
-  $("#wave-file").textContent = first.name;
-  $("#wave-info").textContent = "reading waveform…";
-  try {
-    const w = await api("/api/waveform", {
-      method: "POST",
-      body: JSON.stringify({ path }),
-    });
-    // Guard against stale responses (user swapped files mid-fetch)
-    if (state.activeFilePath !== path) return;
-    state.activeWaveform = w;
-    const durStr = fmtDuration(w.duration);
-    const capped = w.analyzed < w.duration
-      ? `  ·  showing first ${fmtDuration(w.analyzed)}`
-      : "";
-    $("#wave-info").textContent = durStr + capped;
-    drawWaveform();
-    if (state.options.threshold_mode === "auto") {
-      fetchCalibrationForActive();
-    }
-  } catch (e) {
-    $("#wave-info").textContent = "couldn't read audio";
-  }
-}
-
-async function fetchCalibrationForActive() {
-  const path = state.activeFilePath;
-  if (!path) return;
-  try {
-    const r = await api("/api/calibrate", {
-      method: "POST",
-      body: JSON.stringify({ path }),
-    });
-    if (state.activeFilePath !== path) return;  // stale
-    state.activeCalibration = r.ok ? r : null;
-    drawWaveform();
-  } catch {
-    state.activeCalibration = null;
-    drawWaveform();
-  }
-}
-
-function getActiveThreshold() {
-  // Priority: manual slider > auto-calibrated > selected preset default.
-  if (state.options.threshold_mode === "auto") {
-    return state.activeCalibration ? state.activeCalibration.amplitude : null;
-  }
-  if (state.tweaks.threshold != null) return state.tweaks.threshold;
-  const preset = state.presets.find((p) => p.id === state.selectedPresetId);
-  if (preset) {
-    const idx = preset.args.indexOf("--edit");
-    if (idx !== -1 && preset.args[idx + 1]) {
-      const m = preset.args[idx + 1].match(/threshold=([\d.]+)/);
-      if (m) return parseFloat(m[1]);
-    }
-  }
-  return 0.03;  // reasonable default when nothing specific applies
-}
-
-function drawWaveform() {
-  const canvas = $("#wave-canvas");
-  if (!canvas || !state.activeWaveform) return;
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.max(100, Math.floor(rect.width * dpr));
-  canvas.height = Math.floor(rect.height * dpr);
-  const ctx = canvas.getContext("2d");
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const w = rect.width;
-  const h = rect.height;
-  ctx.clearRect(0, 0, w, h);
-
-  const peaks = state.activeWaveform.peaks;
-  const threshold = getActiveThreshold();
-  const mid = h / 2;
-  const halfH = (h / 2) - 2;  // tiny breathing room top/bottom
-  const barW = w / peaks.length;
-
-  for (let i = 0; i < peaks.length; i++) {
-    const p = peaks[i];
-    const above = threshold == null ? true : p >= threshold;
-    ctx.fillStyle = above ? "#ededed" : "#3a3a3a";
-    const barH = Math.max(0.5, p * halfH);
-    ctx.fillRect(i * barW, mid - barH, Math.max(1, barW - 0.2), barH * 2);
-  }
-
-  if (threshold != null && threshold > 0) {
-    const y = threshold * halfH;
-    ctx.strokeStyle = "rgba(255,255,255,0.45)";
-    ctx.setLineDash([4, 4]);
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, mid - y); ctx.lineTo(w, mid - y);
-    ctx.moveTo(0, mid + y); ctx.lineTo(w, mid + y);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-  // Threshold readout + silent-fraction chip when auto-calibrated.
-  const thText = $("#wave-threshold-text");
-  if (threshold == null) {
-    thText.textContent = "—";
-  } else {
-    let label = threshold.toFixed(3);
-    if (state.options.threshold_mode === "auto" && state.activeCalibration) {
-      const pct = Math.round(state.activeCalibration.silent_fraction * 100);
-      label += `  ·  ${pct}% flagged silent`;
-    }
-    thText.textContent = label;
-  }
 }
 
 /* ── Start bar ───────────────────────────────────────────────────────────── */

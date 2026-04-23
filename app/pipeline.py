@@ -243,62 +243,6 @@ def _silence_fraction_at(path: Path, db: int, max_secs: int | None) -> float | N
     return silent / total
 
 
-def extract_waveform(
-    path: Path,
-    bucket_count: int = 1000,
-    max_duration: float = 1800.0,
-) -> dict | None:
-    """Decode audio to mono f32 at a low sample rate, bucket to peak values
-    suitable for drawing a waveform. Returns {peaks, duration, analyzed}.
-
-    Pure-Python bucketing (no numpy dependency). For a 30-min file this runs
-    well under a second on an M-series Mac.
-    """
-    import array
-    import subprocess
-    if not path.exists():
-        return None
-    duration = probe_duration(path)
-    if duration is None or duration <= 0:
-        return None
-    analyze_dur = min(duration, max_duration)
-    sample_rate = 200  # enough detail for envelope visualization
-    cmd = [
-        FFMPEG_BIN, "-nostdin", "-hide_banner", "-loglevel", "error",
-        "-t", f"{analyze_dur:.2f}",
-        "-i", str(path),
-        "-f", "f32le", "-ac", "1", "-ar", str(sample_rate), "-",
-    ]
-    try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=120)
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return None
-    if proc.returncode != 0 or not proc.stdout:
-        return None
-    samples = array.array("f")
-    samples.frombytes(proc.stdout)
-    n = len(samples)
-    if n == 0:
-        return None
-    peaks = [0.0] * bucket_count
-    for i in range(bucket_count):
-        start = (i * n) // bucket_count
-        end = ((i + 1) * n) // bucket_count
-        mx = 0.0
-        for j in range(start, end):
-            v = samples[j]
-            if v < 0:
-                v = -v
-            if v > mx:
-                mx = v
-        peaks[i] = round(mx, 4)
-    return {
-        "peaks": peaks,
-        "duration": duration,
-        "analyzed": round(analyze_dur, 2),
-    }
-
-
 def calibrate_threshold(
     path: Path,
     max_secs: int | None = 60,
